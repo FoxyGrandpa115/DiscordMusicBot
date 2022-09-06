@@ -55,7 +55,7 @@ client.on('message', message => {
     const guild = message.guild
 
     if (command === 'play') {
-        client.commands.get('play').execute(message, args, command);
+        client.commands.get('play').plays(message, args, command);
     } else
     if (command === 'website') {
         client.commands.get('website').execute(message, args);
@@ -67,9 +67,5 @@ client.on('message', message => {
         client.commands.get('help').info(message, guild);
     }
 })
-
-
-
-
 
 client.login('OTkwMzM3NTE5NjIxMTQwNTMy.GAr8Vk.kYRo2iWD4WXMDVwIFgTb-A8TYl1DjfvsfEuZSQ');

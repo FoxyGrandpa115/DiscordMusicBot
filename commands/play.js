@@ -116,7 +116,7 @@ module.exports = {
         song_queue.connection.destroy();
         queue_.delete(guild.id);
     },
-    async plays(message, queue, command) {
+    async plays(message, guild, queue, command) {
         if (!message.member.voice.channel) return message.channel.send('Connect to a Voice Channel')
 
         const connection = joinVoiceChannel({
@@ -125,7 +125,7 @@ module.exports = {
             adapterCreator: message.guild.voiceAdapterCreator
         })
 
-
+        const song_queue = queue_.get(guild.id);
         let args = message.content.split('play')[1]
         let yt_info = await play.search(args, {
             limit: 1
@@ -147,21 +147,28 @@ module.exports = {
         })
 
         player.play(resource)
+            //If player is idle
+        player.on(AudioPlayerStatus.Idle, () => {
+            song_queue.songs.shift();
+            video_player(guild, song_queue.songs[0], queue_);
+        });
 
         connection.subscribe(player)
-        if (song == null) {
+        if (resource == null) {
             await song_queue.text_channel.send(`No more songs in queue.. see you next time! 👋`)
             song_queue.connection.destroy();
             queue_.delete(guild.id);
             return;
         }
     },
-    async plays_url(message, queue, command) {
+    async plays_url(message, guild, queue, command) {
+        const song_queue = queue_.get(guild.id);
         let args = message.content.split('play ')[1].split(' ')[0]
 
         let yt_info = await play.video_info(args)
         console.log(yt_info.video_details.title)
-            //sending song info in channel
+
+        //sending song info in channel
         await message.channel.send(`🎶 Now playing **${yt_info[0].title}** 🎼 : **${yt_info[0].durationRaw}**`)
         let stream = await play.stream_from_info(yt_info)
 
@@ -176,10 +183,14 @@ module.exports = {
         })
 
         player.play(resource)
-
+            //If player is idle
+        player.on(AudioPlayerStatus.Idle, () => {
+            song_queue.songs.shift();
+            video_player(guild, song_queue.songs[0], queue_);
+        });
         connection.subscribe(player)
-        if (song == null) {
-            await song_queue.text_channel.send(`No more songs in queue.. see you next time! 👋`)
+        if (resource == null) {
+            await message.channel.send(`No more songs in queue.. see you next time! 👋`)
             song_queue.connection.destroy();
             queue_.delete(guild.id);
             return;
