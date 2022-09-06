@@ -1,4 +1,6 @@
-const ytdl = require('ytdl-core');
+const ytdl = require('ytdl-core'); // causes random interruption sometimes...
+const play = require('play-dl')
+
 const ytSearch = require('yt-search');
 const usetube = require('usetube');
 const { channel } = require('diagnostics_channel');
@@ -38,17 +40,19 @@ module.exports = {
         if (command === 'play') {
 
         }
+        //playlist functionality.. dont think works yet
         if (args[0].match(/^https?:\/\/(www.youtube.com|youtube.com)\/playlist(.*)$/)) {
             const playlist = await usetube.getPlaylistVideos(args[0]);
             for (i = 0; i < playlist.length; i++) {
                 const song_info = await ytdl.getInfo(args[i]);
+                const songplay_info = await play_dl.getInfo(args[i]);
                 song = { title: song_info.videoDetails.title, url: song_info.videoDetails.video_url, time: song_info.videoDetails.lengthSeconds % 3600 }
-                server_queue.songs.push(song);
+                song_play = { title: songplay_info.videoDetails.title, url: songplay_info.videoDetails.video_url, time: songplay_info.videoDetails.lengthSeconds % 3600 }
+                    //testing play-dl
+                server_queue.songs.push(song_play);
             }
-        } else if (ytdl.validateURL(args[0])) {
-            const song_info = await ytdl.getInfo(args[0]);
-            //console.log(song_info.videoDetails)
-            song = { title: song_info.videoDetails.title, url: song_info.videoDetails.video_url, time: song_info.videoDetails.lengthSeconds % 3600 }
+        } else if (ytdl.validateURL(args[0])) { //detects a URL
+            plays_url(args[0]);
         } else {
             //not a url...
             const video_finder = async(query) => {
@@ -112,6 +116,75 @@ module.exports = {
         song_queue.connection.destroy();
         queue_.delete(guild.id);
     },
+    async plays(message, queue, command) {
+        if (!message.member.voice.channel) return message.channel.send('Connect to a Voice Channel')
+
+        const connection = joinVoiceChannel({
+            channelId: message.member.voice.channel.id,
+            guildId: message.guild.id,
+            adapterCreator: message.guild.voiceAdapterCreator
+        })
+
+
+        let args = message.content.split('play')[1]
+        let yt_info = await play.search(args, {
+            limit: 1
+        })
+
+        console.log(yt_info[0].title)
+        await message.channel.send(`🎶 Now playing **${yt_info[0].title}** 🎼 : **${yt_info[0].durationRaw}**`)
+
+        let stream = await play.stream(yt_info[0].url)
+
+        let resource = createAudioResource(stream.stream, {
+            inputType: stream.type
+        })
+
+        let player = createAudioPlayer({
+            behaviors: {
+                noSubscriber: NoSubscriberBehavior.Play
+            }
+        })
+
+        player.play(resource)
+
+        connection.subscribe(player)
+        if (song == null) {
+            await song_queue.text_channel.send(`No more songs in queue.. see you next time! 👋`)
+            song_queue.connection.destroy();
+            queue_.delete(guild.id);
+            return;
+        }
+    },
+    async plays_url(message, queue, command) {
+        let args = message.content.split('play ')[1].split(' ')[0]
+
+        let yt_info = await play.video_info(args)
+        console.log(yt_info.video_details.title)
+            //sending song info in channel
+        await message.channel.send(`🎶 Now playing **${yt_info[0].title}** 🎼 : **${yt_info[0].durationRaw}**`)
+        let stream = await play.stream_from_info(yt_info)
+
+        let resource = createAudioResource(stream.stream, {
+            inputType: stream.type
+        })
+
+        let player = createAudioPlayer({
+            behaviors: {
+                noSubscriber: NoSubscriberBehavior.Play
+            }
+        })
+
+        player.play(resource)
+
+        connection.subscribe(player)
+        if (song == null) {
+            await song_queue.text_channel.send(`No more songs in queue.. see you next time! 👋`)
+            song_queue.connection.destroy();
+            queue_.delete(guild.id);
+            return;
+        }
+    }
     //need to fix this later
     // pause(message, guild) {
     //     const player = createAudioPlayer();
@@ -158,7 +231,7 @@ const video_player = async(guild, song, queue_) => {
     }
     //const resource = createAudioResource(stream);
     //setting audio quality and highWaterMark values here (important)
-    const stream = ytdl(song.url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 }, { highWaterMark: 1 });
+    const stream = play_dl(song.url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 }, { highWaterMark: 1 }); //< need to fix later when
 
     player.play(createAudioResource(stream, { seek: 0, volume: 1 }))
     player.on(AudioPlayerStatus.Idle, () => {
