@@ -65,6 +65,8 @@ module.exports = {
             } else {
                 message.channel.send('Error finding video')
             }
+            //let yt_info = await play.search(args, )
+            //song = { title: yt_info[0].title, url: yt_info[0].url, time: yt_info[0].durationRaw }
         }
         if (!server_queue) {
             const queue_constructor = {
@@ -85,7 +87,8 @@ module.exports = {
                 });
                 queue_constructor.connection = connection;
                 //important - where video player is called...
-                video_player(message.guild, queue_constructor.songs[0], queue_);
+                //video_player(message.guild, queue_constructor.songs[0], queue_, message);
+                plays(message.guild, queue_constructor.songs[0], queue_, message, args[0]);
 
                 //queue_.delete(message.guild.id);
             } catch (err) {
@@ -99,76 +102,13 @@ module.exports = {
             return message.channel.send(`**${song.title}** added to the queue ✅`);
         }
     },
-    skip_song(message, guild) {
-        const song_queue = queue_.get(guild.id);
-        song_queue.songs.shift();
-        //skipping
-        message.channel.send(`Skipping song.. ⏩`);
-        video_player(guild, song_queue.songs[0], queue_);
-    },
-    stop_song(message, guild) {
-        const song_queue = queue_.get(guild.id);
-        const player = createAudioPlayer();
-        song_queue.connection.subscribe(player);
-        song_queue.songs.shift();
-        //stopping
-        message.channel.send(`Ending song queue.. 🛑`);
-        song_queue.connection.destroy();
-        queue_.delete(guild.id);
-    },
-    async plays(message, guild, queue, command) {
-        if (!message.member.voice.channel) return message.channel.send('Connect to a Voice Channel')
 
-        const connection = joinVoiceChannel({
-            channelId: message.member.voice.channel.id,
-            guildId: message.guild.id,
-            adapterCreator: message.guild.voiceAdapterCreator
-        })
-
-        const song_queue = queue_.get(guild.id);
-        let args = message.content.split('play')[1]
-        let yt_info = await play.search(args, {
-            limit: 1
-        })
-
-        console.log(yt_info[0].title)
-        await message.channel.send(`🎶 Now playing **${yt_info[0].title}** 🎼 : **${yt_info[0].durationRaw}**`)
-
-        let stream = await play.stream(yt_info[0].url)
-
-        let resource = createAudioResource(stream.stream, {
-            inputType: stream.type
-        })
-
-        let player = createAudioPlayer({
-            behaviors: {
-                noSubscriber: NoSubscriberBehavior.Play
-            }
-        })
-
-        player.play(resource)
-            //If player is idle
-        player.on(AudioPlayerStatus.Idle, () => {
-            song_queue.songs.shift();
-            video_player(guild, song_queue.songs[0], queue_);
-        });
-
-        connection.subscribe(player)
-        if (resource == null) {
-            await song_queue.text_channel.send(`No more songs in queue.. see you next time! 👋`)
-            song_queue.connection.destroy();
-            queue_.delete(guild.id);
-            return;
-        }
-    },
-    async plays_url(message, guild, queue, command) {
-        const song_queue = queue_.get(guild.id);
+    async plays_url(message, queue, guild, command) {
         let args = message.content.split('play ')[1].split(' ')[0]
 
         let yt_info = await play.video_info(args)
         console.log(yt_info.video_details.title)
-
-        //sending song info in channel
+            //sending song info in channel
         await message.channel.send(`🎶 Now playing **${yt_info[0].title}** 🎼 : **${yt_info[0].durationRaw}**`)
         let stream = await play.stream_from_info(yt_info)
 
@@ -183,76 +123,122 @@ module.exports = {
         })
 
         player.play(resource)
-            //If player is idle
-        player.on(AudioPlayerStatus.Idle, () => {
-            song_queue.songs.shift();
-            video_player(guild, song_queue.songs[0], queue_);
-        });
-        connection.subscribe(player)
-        if (resource == null) {
-            await message.channel.send(`No more songs in queue.. see you next time! 👋`)
-            song_queue.connection.destroy();
-            queue_.delete(guild.id);
-            return;
-        }
-    }
-    //need to fix this later
-    // pause(message, guild) {
-    //     const player = createAudioPlayer();
-    //     const song_queue = queue_.get(guild.id);
-    //     if (!song_queue.connection) {
-    //         return message.channel.send('No music is playing..');
-    //     }
-    //     if (!message.member.voice.channel) {
-    //         return message.channel.send('Please enter voice channel to execute this command.');
-    //     }
-    //     //pausing
-    //     message.channel.send(`Paused.`);
-    //     player.pause();
-    // },
-    // resume(message, guild) {
-    //     const player = createAudioPlayer();
-    //     const song_queue = queue_.get(guild.id);
-    //     if (!song_queue.connection) {
-    //         return message.channel.send('No music is playing..');
-    //     }
-    //     if (!message.member.voice.channel) {
-    //         return message.channel.send('Please enter voice channel to execute this command.');
-    //     }
-    //     //resuming
-    //     message.channel.send(`Resumed.`);
-    //     player.unpause();
-    // }
 
+        connection.subscribe(player)
+    },
+    skip_song(message, guild) {
+        const song_queue = queue_.get(guild.id);
+        song_queue.songs.shift();
+        //skipping
+        message.channel.send(`Skipping song.. ⏩`);
+        plays(guild, queue_, message);
+    },
+    stop_song(message, guild) {
+        const song_queue = queue_.get(guild.id);
+        const player = createAudioPlayer();
+        song_queue.connection.subscribe(player);
+        song_queue.songs.shift();
+        //stopping
+        message.channel.send(`Ending song queue.. 🛑`);
+        song_queue.connection.destroy();
+        queue_.delete(guild.id);
+    },
 }
 
 
 
 //video player constant
-const video_player = async(guild, song, queue_) => {
-    const song_queue = queue_.get(guild.id);
+const video_player = async(guild, song, queue_, message) => {
+        const song_queue = queue_.get(guild.id);
+        let args = message.content.split('play ')[1].split(' ')[0]
+        let yt_info = await play.search(args, {
+            limit: 1
+        })
 
-    const player = createAudioPlayer();
-    song_queue.connection.subscribe(player);
-    if (song == null) {
-        await song_queue.text_channel.send(`No more songs in queue.. see you next time! 👋`)
-        song_queue.connection.destroy();
-        queue_.delete(guild.id);
-        return;
+        const player = createAudioPlayer();
+        song_queue.connection.subscribe(player);
+        if (song == null) {
+            await song_queue.text_channel.send(`No more songs in queue.. see you next time! 👋`)
+            song_queue.connection.destroy();
+            queue_.delete(guild.id);
+            return;
+        }
+        //const resource = createAudioResource(stream);
+        //setting audio quality and highWaterMark values here (important)
+        //const stream = play_dl(song.url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 }, { highWaterMark: 1 }); //< need to fix later when
+        if (ytdl.validateURL(args)) { //detects a URL
+            let stream = await play.video_info(args)
+            let resource = createAudioResource(stream.stream, {
+                inputType: stream.type
+            })
+            let player = createAudioPlayer({
+                behaviors: {
+                    noSubscriber: NoSubscriberBehavior.Play
+                }
+            })
+
+            player.play(resource)
+            player.on(AudioPlayerStatus.Idle, () => {
+                song_queue.songs.shift();
+                video_player(guild, song_queue.songs[0], queue_);
+            });
+            // song_queue.connection.play(stream, { seek: 0, volume: 0.5 })
+            //     .on('finish', () => {
+            //         song_queue.songs.shift();
+            //         video_player(guild, song_queue.songs[0]);
+            //     });
+            await song_queue.text_channel.send(`🎶 Now playing **${song.title}** 🎼 : **${song.time}**`)
+        } else {
+            let stream = await play.stream(yt_info[0].url)
+            let resource = createAudioResource(stream.stream, {
+                inputType: stream.type
+            })
+            let player = createAudioPlayer({
+                behaviors: {
+                    noSubscriber: NoSubscriberBehavior.Play
+                }
+            })
+
+            player.play(resource)
+            player.on(AudioPlayerStatus.Idle, () => {
+                song_queue.songs.shift();
+                video_player(guild, song_queue.songs[0], queue_);
+            });
+            // song_queue.connection.play(stream, { seek: 0, volume: 0.5 })
+            //     .on('finish', () => {
+            //         song_queue.songs.shift();
+            //         video_player(guild, song_queue.songs[0]);
+            //     });
+            await song_queue.text_channel.send(`🎶 Now playing **${song.title}** 🎼 : **${song.time}**`)
+        }
     }
-    //const resource = createAudioResource(stream);
-    //setting audio quality and highWaterMark values here (important)
-    const stream = play_dl(song.url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 }, { highWaterMark: 1 }); //< need to fix later when
+    //play-dl video player
+const plays = async(guild, song, queue_, message) => {
 
-    player.play(createAudioResource(stream, { seek: 0, volume: 1 }))
+    //let args = message.content.split('play ')[1].split(' ')[0]
+    //if (!args.length) return message.channel.send('need second argument');
+
+    const song_queue = queue_.get(guild.id)
+
+    let stream = await play.stream(song.url)
+
+    let resource = createAudioResource(stream.stream, {
+        inputType: stream.type
+    })
+
+    let player = createAudioPlayer({
+        behaviors: {
+            noSubscriber: NoSubscriberBehavior.Play
+        }
+    })
+
+    player.play(resource)
+    song_queue.connection.subscribe(player)
+
     player.on(AudioPlayerStatus.Idle, () => {
         song_queue.songs.shift();
         video_player(guild, song_queue.songs[0], queue_);
     });
-    // song_queue.connection.play(stream, { seek: 0, volume: 0.5 })
-    //     .on('finish', () => {
-    //         song_queue.songs.shift();
-    //         video_player(guild, song_queue.songs[0]);
-    //     });
-    await song_queue.text_channel.send(`🎶 Now playing **${song.title}** 🎼 : **${song.time}**`)
+    await message.channel.send(`🎶 Now playing **${song.title}** 🎼 : **${song.time}**`)
+
 }
