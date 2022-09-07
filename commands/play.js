@@ -56,12 +56,12 @@ module.exports = {
         } else {
             //not a url...
             const video_finder = async(query) => {
-                const result = await ytSearch(query);
-                return (result.videos.length > 1) ? result.videos[0] : null;
+                const result = await play.search(query);
+                return (result.length > 1) ? result[0] : null;
             }
             const video = await video_finder(args.join(' '));
             if (video) {
-                song = { title: video.title, url: video.url, time: video.timestamp }
+                song = { title: video.title, url: video.url, time: video.durationRaw }
             } else {
                 message.channel.send('Error finding video')
             }
@@ -86,9 +86,10 @@ module.exports = {
                     adapterCreator: voice_channel.guild.voiceAdapterCreator,
                 });
                 queue_constructor.connection = connection;
-                //important - where video player is called...
-                //video_player(message.guild, queue_constructor.songs[0], queue_, message);
-                plays(message.guild, queue_constructor.songs[0], queue_, message, args[0]);
+                const song_queue = queue_.get(message.guild.id)
+                    //important - where video player is called...
+                    //video_player(message.guild, queue_constructor.songs[0], queue_, message);
+                plays(message.guild, queue_constructor.songs[0], queue_constructor, message, args[0]);
 
                 //queue_.delete(message.guild.id);
             } catch (err) {
@@ -131,7 +132,7 @@ module.exports = {
         song_queue.songs.shift();
         //skipping
         message.channel.send(`Skipping song.. ⏩`);
-        plays(guild, queue_, message);
+        plays(guild, song_queue.songs[0], song_queue, message);
     },
     stop_song(message, guild) {
         const song_queue = queue_.get(guild.id);
@@ -218,7 +219,7 @@ const plays = async(guild, song, queue_, message) => {
     //let args = message.content.split('play ')[1].split(' ')[0]
     //if (!args.length) return message.channel.send('need second argument');
 
-    const song_queue = queue_.get(guild.id)
+    //const song_queue = queue_.get(guild.id)
 
     let stream = await play.stream(song.url)
 
@@ -233,12 +234,15 @@ const plays = async(guild, song, queue_, message) => {
     })
 
     player.play(resource)
-    song_queue.connection.subscribe(player)
+    queue_.connection.subscribe(player)
 
-    player.on(AudioPlayerStatus.Idle, () => {
-        song_queue.songs.shift();
-        video_player(guild, song_queue.songs[0], queue_);
-    });
+    if (queue_.songs.length > 1) {
+        player.on(AudioPlayerStatus.Idle, () => {
+            queue_.songs.shift();
+            plays(guild, queue_.songs[0], queue_);
+        });
+
+    }
     await message.channel.send(`🎶 Now playing **${song.title}** 🎼 : **${song.time}**`)
 
 }
