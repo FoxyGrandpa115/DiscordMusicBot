@@ -40,6 +40,13 @@ module.exports = {
         if (command === 'play') {
 
         }
+        const queue_constructor = {
+            voice_channel: voice_channel,
+            text_channel: message.channel,
+            connection: null,
+            songs: []
+        }
+
         //playlist functionality.. dont think works yet
         if (args[0].match(/^https?:\/\/(www.youtube.com|youtube.com)\/playlist(.*)$/)) {
             const playlist = await usetube.getPlaylistVideos(args[0]);
@@ -52,7 +59,12 @@ module.exports = {
                 server_queue.songs.push(song_play);
             }
         } else if (ytdl.validateURL(args[0])) { //detects a URL
-            plays_url(args[0]);
+            let video = await play.video_info(args[0]);
+            if (video) {
+                song = { title: video.video_details.title, url: video.video_details.url, time: video.video_details.durationRaw }
+            } else {
+                message.channel.send('Error with URL provided')
+            }
         } else {
             //not a url...
             const video_finder = async(query) => {
@@ -69,12 +81,7 @@ module.exports = {
             //song = { title: yt_info[0].title, url: yt_info[0].url, time: yt_info[0].durationRaw }
         }
         if (!server_queue) {
-            const queue_constructor = {
-                voice_channel: voice_channel,
-                text_channel: message.channel,
-                connection: null,
-                songs: []
-            }
+
             queue_.set(message.guild.id, queue_constructor);
             queue_constructor.songs.push(song);
 
@@ -102,30 +109,6 @@ module.exports = {
             //queue_.delete(message.guild.id);
             return message.channel.send(`**${song.title}** added to the queue ✅`);
         }
-    },
-
-    async plays_url(message, queue, guild, command) {
-        let args = message.content.split('play ')[1].split(' ')[0]
-
-        let yt_info = await play.video_info(args)
-        console.log(yt_info.video_details.title)
-            //sending song info in channel
-        await message.channel.send(`🎶 Now playing **${yt_info[0].title}** 🎼 : **${yt_info[0].durationRaw}**`)
-        let stream = await play.stream_from_info(yt_info)
-
-        let resource = createAudioResource(stream.stream, {
-            inputType: stream.type
-        })
-
-        let player = createAudioPlayer({
-            behaviors: {
-                noSubscriber: NoSubscriberBehavior.Play
-            }
-        })
-
-        player.play(resource)
-
-        connection.subscribe(player)
     },
     skip_song(message, guild) {
         const song_queue = queue_.get(guild.id);
@@ -233,16 +216,40 @@ const plays = async(guild, song, queue_, message) => {
         }
     })
 
-    player.play(resource)
+
     queue_.connection.subscribe(player)
 
-    if (queue_.songs.length > 1) {
-        player.on(AudioPlayerStatus.Idle, () => {
-            queue_.songs.shift();
-            plays(guild, queue_.songs[0], queue_);
-        });
+    player.play(resource)
+    player.on(AudioPlayerStatus.Idle, () => {
+        queue_.songs.shift();
+        plays(guild, queue_.songs[0], queue_);
+    });
+    await queue_.text_channel.send(`🎶 Now playing **${song.title}** 🎼 : **${song.time}**`)
 
-    }
+}
+
+const plays_url = async(guild, song, queue_, message, args) => {
+
+    let yt_info = await play.video_info(args)
+    console.log(yt_info.video_details.title)
+        //sending song info in channel
     await message.channel.send(`🎶 Now playing **${song.title}** 🎼 : **${song.time}**`)
+    let stream = await play.stream_from_info(yt_info)
+
+    let resource = createAudioResource(stream.stream, {
+        inputType: stream.type
+    })
+
+    let player = createAudioPlayer({
+        behaviors: {
+            noSubscriber: NoSubscriberBehavior.Play
+        }
+    })
+    connection.subscribe(player)
+    player.play(resource)
+    player.on(AudioPlayerStatus.Idle, () => {
+        queue_.songs.shift();
+        plays(guild, queue_.songs[0], queue_);
+    });
 
 }
