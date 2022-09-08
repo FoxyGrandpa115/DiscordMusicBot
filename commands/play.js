@@ -111,6 +111,14 @@ module.exports = {
         }
     },
     skip_song(message, guild) {
+        const voice_channel = message.member.voice.channel;
+        if (!voice_channel) return message.channel.send('get in the channel to execute this command');
+        const permissions = voice_channel.permissionsFor(message.client.user);
+        if (!permissions.has('CONNECT')) return message.channel.send('You dont have the right permissions to play this command');
+        if (!permissions.has('SPEAK')) return message.channel.send('You dont have the right permissions to play this command');
+        if ((song_queue.songs.next || song_queue.songs) == null) {
+            message.channel.send(`No song to skip to..`);
+        }
         const song_queue = queue_.get(guild.id);
         song_queue.songs.shift();
         //skipping
@@ -118,6 +126,8 @@ module.exports = {
         plays(guild, song_queue.songs[0], song_queue, message);
     },
     stop_song(message, guild) {
+        const voice_channel = message.member.voice.channel;
+        if (!voice_channel) return message.channel.send('get in the channel to execute this command');
         const song_queue = queue_.get(guild.id);
         const player = createAudioPlayer();
         song_queue.connection.subscribe(player);
@@ -127,6 +137,7 @@ module.exports = {
         song_queue.connection.destroy();
         queue_.delete(guild.id);
     },
+    //testing queue function which lists out queued songs
     queue(message, guild) {
         const song_queue = queue_.get(guild.id);
         message.channel.send(`Songs in queue 📃:`)
@@ -138,6 +149,45 @@ module.exports = {
         console.log(output)
         message.channel.send(`${output}`)
     },
+    //testing song pausing
+    pause(message, guild) {
+        const song_queue = queue_.get(guild.id);
+        const voice_channel = message.member.voice.channel;
+        if (!voice_channel) return message.channel.send('get in the channel to execute this command');
+        if (!song_queue.connection) return message.channel.send(`There is no music playing`)
+        if (song_queue.connection.paused) return message.channel.send(`Song is already paused`)
+
+
+        let player = createAudioPlayer({
+            behaviors: {
+                noSubscriber: NoSubscriberBehavior.Play
+            }
+        })
+        song_queue.connection.subscribe(player)
+        player.pause(resource)
+        message.channel.send(`Song is paused. ⏸`);
+    },
+    resume(message, guild) {
+        const song_queue = queue_.get(guild.id);
+        const voice_channel = message.member.voice.channel;
+        if (!voice_channel) return message.channel.send('get in the channel to execute this command');
+        if (!song_queue.connection) return message.channel.send(`There is no music playing`)
+        if (!song_queue.connection.resumed) return message.channel.send(`Song is already playing`)
+        let stream = play.stream(song_queue.songs[0].url)
+
+        let resource = createAudioResource(stream.stream, {
+            inputType: stream.type
+        })
+
+        let player = createAudioPlayer({
+            behaviors: {
+                noSubscriber: NoSubscriberBehavior.Play
+            }
+        })
+        queue_.connection.subscribe(player)
+        player.resume(resource)
+        message.channel.send(`Song is resumed. ⏯`);
+    }
 }
 
 
@@ -210,10 +260,11 @@ const video_player = async(guild, song, queue_, message) => {
     //play-dl video player
 const plays = async(guild, song, queue_, message) => {
 
-    //let args = message.content.split('play ')[1].split(' ')[0]
-    //if (!args.length) return message.channel.send('need second argument');
-
-    //const song_queue = queue_.get(guild.id)
+    if (queue_.songs[0] == null) {
+        await queue_.text_channel.send(`No more songs in queue.. see you next time! 👋`)
+        queue_.connection.destroy();
+        return;
+    }
 
     let stream = await play.stream(song.url)
 
