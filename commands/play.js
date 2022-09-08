@@ -127,6 +127,17 @@ module.exports = {
         song_queue.connection.destroy();
         queue_.delete(guild.id);
     },
+    queue(message, guild) {
+        const song_queue = queue_.get(guild.id);
+        message.channel.send(`Songs in queue 📃:`)
+        let output = []
+        for (i = 0; i < song_queue.songs.length; i++) {
+            output.push(`🎶  **${song_queue.songs[i].title}** : **${song_queue.songs[i].time}** 🎼` + '\n')
+        }
+        console.log(song_queue.length)
+        console.log(output)
+        message.channel.send(`${output}`)
+    },
 }
 
 
