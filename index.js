@@ -55,7 +55,7 @@ client.on('message', message => {
     const guild = message.guild
 
     if (command === 'play') {
-        client.commands.get('play').plays(message, args, command);
+        client.commands.get('play').execute(message, args, command);
     } else
     if (command === 'website') {
         client.commands.get('website').execute(message, args);
@@ -65,6 +65,12 @@ client.on('message', message => {
         client.commands.get('play').stop_song(message, guild);
     } else if (command === 'help') {
         client.commands.get('help').info(message, guild);
+    } else if (command === 'queue') {
+        client.commands.get('play').queue(message, guild);
+    } else if (command === 'pause') {
+        client.commands.get('play').execute(message, guild, command);
+    } else if (command === 'resume') {
+        client.commands.get('play').execute(message, guild, command);
     }
 })
 
