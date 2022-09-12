@@ -43,7 +43,7 @@ module.exports = {
                 console.log(server_queue.player._state.status)
                 await message.channel.send(`Paused playback. ⏸`)
                 return;
-            } else if (command == 'resume') {
+            } else if ((command == 'resume')) {
                 if (!server_queue) return message.channel.send('Nothing is currently playing');
                 if (server_queue.player._state.status == 'playing') return message.channel.send('Music is already playing');
                 server_queue.player.unpause();
@@ -52,6 +52,7 @@ module.exports = {
                 return;
             }
             if (command === 'play') {
+
                 const queue_constructor = {
                         voice_channel: voice_channel,
                         text_channel: message.channel,
@@ -85,8 +86,8 @@ module.exports = {
                         queue_constructor.songs.push(song);
                         //return message.channel.send(`**${song.title}** added to the queue ✅`);
                     }
-                    playlistQueue(message, guild)
-                    plays(message.guild, queue_constructor.songs[0], queue_constructor, message, args[0]);
+                    // playlistQueue(message, guild)
+                    // plays(message.guild, queue_constructor.songs[0], queue_constructor, message, args[0]);
                 } else if (ytdl.validateURL(args[0])) { //detects a URL
                     let video = await play.video_info(args[0]);
                     if (video) {
@@ -132,9 +133,13 @@ module.exports = {
                         message.channel.send('There was an error connecting!');
                         throw err;
                     }
-                } else {
+                } else if (server_queue.player._state.status == 'playing') {
                     server_queue.songs.push(song);
                     return message.channel.send(`**${song.title}** added to the queue ✅`);
+                } else if (server_queue.player._state.status == 'idle') {
+                    plays(message.guild, queue_constructor.songs[0], queue_constructor, message, args[0]);
+                } else {
+                    return message.channel.send(`error loading server queue`);
                 }
             }
         },
@@ -194,12 +199,15 @@ const playlistQueue = async(message, guild) => {
     //play-dl video player
 const plays = async(guild, song, queue_, message, paused, curPlayer) => {
 
-    if (!queue_) {
+    if (!song) {
         await queue_.text_channel.send(`No more songs in queue.. see you next time! 👋`)
-        queue_.connection.destroy();
+        if (queue_.connection) {
+            queue_.connection.destroy();
+        } else {
+            await queue_.text_channel.send(`error getting song`)
+        }
         return;
     }
-
     let stream = await play.stream(song.url)
 
     let resource = createAudioResource(stream.stream, {
