@@ -189,14 +189,23 @@ module.exports = {
     //testing queue function which lists out queued songs
     queue(message, guild) {
         const song_queue = queue_.get(guild.id);
-        message.channel.send(`Songs in queue 📃:`)
-        let output = []
-        for (i = 0; i < song_queue.songs.length; i++) {
-            output.push(`🎶  **${song_queue.songs[i].title}** : **${song_queue.songs[i].time}** 🎼` + '\n')
+        try{
+            let output = []
+            if(song_queue){
+                for (i = 0; i < song_queue.songs.length; i++) {
+                    output.push(`🎶  **${song_queue.songs[i].title}** : **${song_queue.songs[i].time}** 🎼` + '\n')
+                }
+                
+            console.log(song_queue.songs.length)
+            console.log(output)
+            message.channel.send(`Songs in queue 📃:`)
+            message.channel.send(`${output}`)
+            }else message.channel.send('No music queue yet!')
+        }catch (err) {
+            queue_.delete(message.guild.id);
+            message.channel.send('There was an error getting the queue! Maybe nothing is playing...');
+            throw err;
         }
-        console.log(song_queue.songs.length)
-        console.log(output)
-        message.channel.send(`${output}`)
     }
 }
 //listing playlist queue
