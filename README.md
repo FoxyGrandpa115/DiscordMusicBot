@@ -2,17 +2,27 @@
 
 A discord bot that can play music from youtube queries, under development.
 
+##current problems: 
+need to refactor commands for discord.js version 14 update and later versions
+playback seems to end after 60 seconds (should be fixed soon), need playlist functionality
+
+
 ## Getting Started
 
 You could pretty much plug and play, but you will need to login to discord and make your own bot which will generate a token in the <YOUR TOKEN HERE>
 part of index.js
 
+
+once you have your token, open the directory of DiscordMusicBot in terminal, then type 'node .' and Enter. If the bot is online, it should be ready to be used.
 ### Prerequisites
 
 Requires: 
 discord.js ^13.8.1
 "play-dl": ^1.9.5
 ### Installing
+
+### Troubleshooting
+use `npm i @discordjs/voice@latest` to update discordjs if bot stops after 60 seconds of playback.
 
 TBD
 

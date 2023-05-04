@@ -196,10 +196,12 @@ module.exports = {
                     output.push(`🎶  **${song_queue.songs[i].title}** : **${song_queue.songs[i].time}** 🎼` + '\n')
                 }
                 
+            if(output){                
             console.log(song_queue.songs.length)
             console.log(output)
             message.channel.send(`Songs in queue 📃:`)
             message.channel.send(`${output}`)
+            }
             }else message.channel.send('No music queue yet!')
         }catch (err) {
             queue_.delete(message.guild.id);
