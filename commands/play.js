@@ -1,10 +1,13 @@
 const ytdl = require('ytdl-core'); // causes random interruption sometimes...
 const play = require('play-dl')
+const ytdlProcess = require('youtube-dl-exec')
+const  {spawn, execSync} = require('child_process')
 
 const ytSearch = require('yt-search');
 const usetube = require('usetube');
 const { channel } = require('diagnostics_channel');
-const { getVoiceConnection, joinVoiceChannel, AudioPlayerStatus, createAudioResource, getNextResource, createAudioPlayer, NoSubscriberBehavior } = require('@discordjs/voice');
+const { getVoiceConnection, joinVoiceChannel, AudioPlayerStatus, createAudioResource,
+     VoiceConnectionStatus, entersState, getNextResource, createAudioPlayer, NoSubscriberBehavior, StreamType } = require('@discordjs/voice');
 const { createReadStream } = require('fs');
 const { Queue } = require('discord-player');
 const { SlashCommandBuilder } = require('@discordjs/builders');
@@ -226,40 +229,78 @@ const playlistQueue = async (message, guild) => {
 const plays = async (guild, song, queue_, message, paused, curPlayer) => {
 
     if (!queue_) {
-        await queue_.text_channel.send(`No more songs in queue.. see you next time! 👋`)
+        await queue_.text_channel.send(`No more songs in queue.. see you next time! 👋`);
         if (queue_.connection) {
             queue_.connection.destroy();
         }
         return;
     } else if (!song) {
-        //await queue_.text_channel.send(`error getting song`)
         if (queue_.connection) {
             setTimeout(() => queue_.connection.destroy(), 60_000);
         }
         return;
     }
 
-    let stream = await play.stream(song.url)
+    try {
+        // 1. Force the Voice Connection to confirm it's completely ready
+        // If it isn't fully established within 5 seconds, it will catch and throw an error.
+        await entersState(queue_.connection, VoiceConnectionStatus.Ready, 5_000);
+        console.log(" Voice UDP network tunnel is fully established!");
 
-    let resource = createAudioResource(stream.stream, {
-        inputType: stream.type
-    })
+        // 2. Fetch the direct media URL string
+        const rawUrl = execSync(`/home/foxy/.local/bin/yt-dlp -g -f 251 "${song.url}"`, {
+            encoding: 'utf-8'
+        }).trim();
 
-    let player = createAudioPlayer({
-        behaviors: {
-            noSubscriber: NoSubscriberBehavior.Play
-        }
-    })
-    queue_.player = player
-    queue_.connection.subscribe(player)
+        // 3. Process the stream cleanly without compression lag
+        const ffmpegProcess = spawn('ffmpeg', [
+            '-reconnect', '1',
+            '-reconnect_streamed', '1',
+            '-reconnect_delay_max', '5',
+            '-i', rawUrl,
+            '-c', 'copy',
+            '-f', 'webm',
+            'pipe:1'
+        ]);
 
-    player.play(resource)
-    await queue_.text_channel.send(`🎶 Now playing **${song.title}** 🎼 : **${song.time}**`)
+        const audioStream = ffmpegProcess.stdout;
 
-    curPlayer = player
-    console.log(curPlayer);
-    player.on(AudioPlayerStatus.Idle, () => {
+        let resource = createAudioResource(audioStream, {
+            inputType: StreamType.WebmOpus
+        });
+
+        let player = createAudioPlayer({
+            behaviors: {
+                noSubscriber: NoSubscriberBehavior.Play
+            }
+        });
+        
+        queue_.player = player;
+        queue_.connection.subscribe(player);
+
+        // 4. Play the resource AFTER confirming connection is alive
+        player.play(resource);
+        await queue_.text_channel.send(`🎶 Now playing **${song.title}** 🎼 : **${song.time}**`);
+
+        curPlayer = player;
+
+        player.on(AudioPlayerStatus.Idle, () => {
+            if (!ffmpegProcess.killed) ffmpegProcess.kill();
+            queue_.songs.shift();
+            const nextSong = queue_.songs;
+            plays(guild, nextSong, queue_, message, paused, curPlayer);
+        });
+
+        player.on('error', error => {
+            console.error(`Audio Player Error: ${error.message}`);
+            if (!ffmpegProcess.killed) ffmpegProcess.kill();
+        });
+
+    } catch (error) {
+        console.error('🔴 Voice Pipeline State Timeout:', error);
+        await queue_.text_channel.send(`❌ Network connection timed out. Trying to jump to next song...`);
+        
         queue_.songs.shift();
-        plays(guild, queue_.songs[0], queue_);
-    });
-}
+        plays(guild, queue_.songs, queue_);
+    }
+};

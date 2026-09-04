@@ -1,63 +1,60 @@
 const Discord = require('discord.js');
+const { Client, GatewayIntentBits, ActivityType } = require('discord.js');
+const fs = require('fs');
+require('dotenv').config(); 
 
-//INTENTS ARE IMPORTANT--  no "GUILD_VOICE_STATES" == NO AUDIO 
-const client = new Discord.Client({
+const client = new Client({
     presence: {
-        status: 'available',
+        status: 'online', 
         afk: false,
         activities: [{
             name: 'In the Garden',
-            type: 'SLEEPING'
+            type: ActivityType.Custom 
         }],
     },
-    intents: ["GUILDS", "GUILD_MESSAGES", "GUILD_MESSAGE_REACTIONS", "GUILD_VOICE_STATES"]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.GuildVoiceStates, // Mandatory for audio streaming functionality
+        GatewayIntentBits.MessageContent    // CRITICAL for reading prefix commands
+    ]
 });
-intents = Discord.Intents.default
+
 var servers = {};
-
 client.queue = new Map();
-
 const prefix = '!';
-const fs = require('fs');
+
+// Load commands
 client.commands = new Discord.Collection();
 const commandFiles = fs.readdirSync('./commands/').filter(file => file.endsWith('.js'));
 for (const file of commandFiles) {
-    const command = require(`./commands/${ file }`);
+    const command = require(`./commands/${file}`);
     client.commands.set(command.name, command);
 }
 
+// Ready Event
 client.on('ready', () => {
     console.log('MangoBot is online!');
-    // Playing in my support server
-    client.user.setActivity("in my garden", { type: "PLAYING" });
-
-    // // Streaming <name of stream>
-    // client.user.setActivity({ type: "STREAMING", url: "<twich url>" });
-
-    // // Watching over xx servers
-    // client.user.setActivity(`over ${client.guilds.cache.size} servers`, {
-    //     type: "WATCHING",
-    // });
-
-    // // Listening to xxx users
-    // client.user.setActivity(
-    //     `to ${client.guilds.cache
-    //   .map((guild) => guild.memberCount)
-    //   .reduce((p, c) => p + c)} users`, { type: "LISTENING" }
-    // );
+    
+    // UPDATED FOR V14: Using ActivityType enum instead of string literal strings
+    client.user.setActivity("in my garden", { type: ActivityType.Playing });
 });
 
-//setting prefix
-client.on('message', message => {
+// UPDATED FOR V14: Swapped 'message' out for 'messageCreate'
+client.on('messageCreate', message => {
     if (!message.content.startsWith(prefix) || message.author.bot) return;
+    
     const args = message.content.slice(prefix.length).split(/ +/);
     const command = args.shift().toLowerCase();
-    const guild = message.guild
+    const guild = message.guild;
 
+    // Check if the command exists inside our collection before running it
+    const cmdTarget = client.commands.get(command) || client.commands.get('play'); 
+    
     if (command === 'play') {
         client.commands.get('play').execute(message, args, command);
-    } else
-    if (command === 'website') {
+    } else if (command === 'website') {
         client.commands.get('website').execute(message, args);
     } else if (command === 'skip') {
         client.commands.get('play').skip_song(message, guild);
@@ -72,6 +69,7 @@ client.on('message', message => {
     } else if (command === 'resume') {
         client.commands.get('play').execute(message, guild, command);
     }
-})
+});
 
-client.login('<YOUR TOKEN HERE>');
+//Keep your token secure
+client.login(process.env.DISCORD_TOKEN);
