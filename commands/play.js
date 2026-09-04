@@ -65,7 +65,7 @@ module.exports = {
                 player: null
             }
             //playlist functionality.. dont think works yet
-            if (args[0].match(/^https?:\/\/(www.youtube.com|youtube.com)\/playlist(.*)$/)) {
+                if (args[0].match(/^https?:\/\/(www.youtube.com|youtube.com)\/playlist(.*)$/)) {
                 const id = args[0].split("=");
                 message.channel.send('Fetching playlist videos...')
                 const playlist = await usetube.getPlaylistVideos(id[1]);
@@ -87,11 +87,8 @@ module.exports = {
                         throw err;
                     }
                     queue_constructor.songs.push(song);
-                    //return message.channel.send(`**${song.title}** added to the queue ✅`);
                 }
-                // playlistQueue(message, guild)
-                // plays(message.guild, queue_constructor.songs[0], queue_constructor, message, args[0]);
-            } else if (ytdl.validateURL(args[0])) { //detects a URL
+            } else if (ytdl.validateURL(args[0])) { // detects a URL
                 let video = await play.video_info(args[0]);
                 if (video) {
                     song = { title: video.video_details.title, url: video.video_details.url, time: video.video_details.durationRaw }
@@ -99,26 +96,42 @@ module.exports = {
                     message.channel.send('Error with URL provided')
                 }
             } else {
-                //not a url...
+                // === FIXED & SECURED SEARCH ENGINE LAYER ===
                 const video_finder = async (query) => {
-                    const result = await play.search(query);
-                    return (result.length > 1) ? result[0] : null;
-                }
+                    try {
+                        // 1. Attempt primary lookup using play-dl
+                        const result = await play.search(query, { source: { youtube: 'video' }, limit: 1 });
+                        if (result && result.length > 0) return result[0];
+                    } catch (err) {
+                        console.warn('⚠️ play-dl search layout failed, attempting yt-search fallback...', err.message);
+                    }
+
+                    try {
+                        // 2. Fallback to yt-search if play-dl hits internal page changes
+                        const ytSearch = require('yt-search');
+                        const fallbackResult = await ytSearch(query);
+                        if (fallbackResult && fallbackResult.videos.length > 0) {
+                            return fallbackResult.videos[0];
+                        }
+                    } catch (fallbackErr) {
+                        console.error('❌ Both search scrapers failed:', fallbackErr.message);
+                    }
+                    return null;
+                };
+
                 const video = await video_finder(args.join(' '));
                 if (video) {
-                    song = { title: video.title, url: video.url, time: video.durationRaw }
+                    // Both play-dl and yt-search match these property mappings perfectly
+                    song = { title: video.title, url: video.url, time: video.durationRaw || video.timestamp }
                 } else {
-                    message.channel.send('Error finding video')
+                    return message.channel.send('Error finding video or search engines are parsing incorrectly.')
                 }
-                //let yt_info = await play.search(args, )
-                //song = { title: yt_info[0].title, url: yt_info[0].url, time: yt_info[0].durationRaw }
             }
+            
             if (!server_queue) {
-
                 queue_.set(message.guild.id, queue_constructor);
                 queue_constructor.songs.push(song);
 
-                //trying to connect to channel 
                 try {
                     const connection = joinVoiceChannel({
                         channelId: voice_channel.id,
@@ -126,23 +139,18 @@ module.exports = {
                         adapterCreator: voice_channel.guild.voiceAdapterCreator,
                     });
                     queue_constructor.connection = connection;
-                    const song_queue = queue_.get(message.guild.id)
-                    //important - where video player is called...
-                    //video_player(message.guild, queue_constructor.songs[0], queue_, message);
                     plays(message.guild, queue_constructor.songs[0], queue_constructor, message, args[0]);
-                    //queue_.delete(message.guild.id);
                 } catch (err) {
                     queue_.delete(message.guild.id);
                     message.channel.send('There was an error connecting!');
                     throw err;
                 }
-            } else if (server_queue.player._state.status == 'playing') {
+            } else if (server_queue.player && server_queue.player._state.status == 'playing') {
                 server_queue.songs.push(song);
                 return message.channel.send(`**${song.title}** added to the queue ✅`);
-            } else if (server_queue.player._state.status == 'idle') {
+            } else if (server_queue.player && server_queue.player._state.status == 'idle') {
                 server_queue.songs.push(song);
                 queue_.set(message.guild.id, queue_constructor);
-                //remaking connection
                 try {
                     const connection = joinVoiceChannel({
                         channelId: voice_channel.id,
@@ -192,23 +200,34 @@ module.exports = {
     //testing queue function which lists out queued songs
     queue(message, guild) {
         const song_queue = queue_.get(guild.id);
-        try{
-            let output = []
-            if(song_queue){
-                for (i = 0; i < song_queue.songs.length; i++) {
-                    output.push(`🎶  **${song_queue.songs[i].title}** : **${song_queue.songs[i].time}** 🎼` + '\n')
+        try {
+            //Verify if the queue exists and actually has tracks inside it
+            if (song_queue && song_queue.songs.length > 0) {
+                let output = [];
+                
+                for (let i = 0; i < song_queue.songs.length; i++) {
+                    output.push(`🎶  **${song_queue.songs[i].title}** : **${song_queue.songs[i].time}** 🎼\n`);
                 }
                 
-            if(output){                
-            console.log(song_queue.songs.length)
-            console.log(output)
-            message.channel.send(`Songs in queue 📃:`)
-            message.channel.send(`${output}`)
+                //Validate length explicitly instead of checking array truthiness
+                if (output.length > 0) {                
+                    console.log(`Queue items count: ${song_queue.songs.length}`);
+                    
+                    // Send the header alert
+                    message.channel.send(`Songs in queue 📃:`);
+                    
+                    // 3. Use .join('') to combine the array lines into a single string cleanly
+                    message.channel.send(output.join(''));
+                } else {
+                    message.channel.send('The queue is currently empty!');
+                }
+            } else {
+                message.channel.send('No music queue yet! Nothing is playing.');
             }
-            }else message.channel.send('No music queue yet!')
-        }catch (err) {
-            queue_.delete(message.guild.id);
-            message.channel.send('There was an error getting the queue! Maybe nothing is playing...');
+        } catch (err) {
+            // Avoid destructive wipes inside basic read operations unless absolutely critical
+            console.error('Error fetching queue text block:', err);
+            message.channel.send('There was an error getting the queue!');
             throw err;
         }
     }
@@ -228,18 +247,24 @@ const playlistQueue = async (message, guild) => {
 //play-dl video player
 const plays = async (guild, song, queue_, message, paused, curPlayer) => {
 
+    //Check if the root queue tracking object exists at all
     if (!queue_) {
+        console.log("[DEBUG] Play function called but no queue object exists.");
+        return; 
+    }
+
+    //Check if the song object is missing or empty
+    if (!song || !song.url) {
+        // Send a message cleanly since we verified queue_ is valid
         await queue_.text_channel.send(`No more songs in queue.. see you next time! 👋`);
+        
         if (queue_.connection) {
+            // Disconnect immediately, or wrap it in your setTimeout if you prefer a delay
             queue_.connection.destroy();
         }
         return;
-    } else if (!song) {
-        if (queue_.connection) {
-            setTimeout(() => queue_.connection.destroy(), 60_000);
-        }
-        return;
     }
+
 
     try {
         // 1. Force the Voice Connection to confirm it's completely ready
